@@ -9,6 +9,7 @@ const app = express()
 app.use(cors());
 app.use(express.json())
 
+// Students endpoints
 app.post('/students', async (req, res) => {
     const { name, mobile, address, email, internshipDomain, college, password } = req.body;
     // Validate the request body
@@ -36,61 +37,13 @@ app.post('/students', async (req, res) => {
 });
 
 app.get('/students', async (req, res) => {
-    const students = await knex.from('students').select();
+    const reqQuery = req.query
+    const query = knex.from('students').select();
+    if (reqQuery.internshipDomain) {
+        query.where('internshipDomain', reqQuery.internshipDomain)
+    }
+    const students = await query
     res.json(students)
-});
-
-app.post('/login', async (req, res) => {
-    const { email, password, role } = req.body;
-    if (!email || !password || !role) {
-        return res.status(400).json({ error: 'Email, password, and role are required' });
-    }
-    try {
-        if (role === "Admin") {
-            if (email === "admin@admin.com" && password === "admin#1947") {
-                return res.status(200).json(email);
-            } else {
-                return res.status(401).json({ error: "Invalid Admin credentials" });
-            }
-        } else if (role === "Faculty") {
-            const faculty = await knex('faculties').where({ email, password }).first();
-            if (faculty) {
-                return res.status(200).json(email);
-            } else {
-                return res.status(401).json({ error: "Invalid Faculty credentials" });
-            }
-        } else if (role === "Student") {
-            const student = await knex('students').where({ email, password }).first();
-            if (student) {
-                return res.status(200).json(email);
-            } else {
-                return res.status(401).json({ error: "Invalid Student credentials" });
-            }
-        } else {
-            return res.status(400).json({ error: "Invalid role specified" });
-        }
-    } catch (error) {
-        console.error('Error during login:', error);
-        res.status(500).json({ error: 'Failed to process login' });
-    }
-});
-
-app.get('/admin/dashboard', async (req, res) => {
-    try {
-        const students = await knex('students')
-        const faculties = await knex('faculties')
-        const tasks = await knex('tasks')
-
-        // Return the data as JSON
-        res.status(200).json({
-            students,
-            faculties,
-            tasks
-        });
-    } catch (error) {
-        console.error('Error fetching admin dashboard data:', error);
-        res.status(500).json({ error: 'Failed to fetch dashboard data' });
-    }
 });
 
 app.delete('/students/:id', async (req, res) => {
@@ -136,10 +89,11 @@ app.put('/students/:id/toggle-active', async (req, res) => {
     }
 });
 
+// Faculties endpoints
 app.post('/faculties', async (req, res) => {
-    const { name, mobile, address, email, college, password } = req.body;
+    const { name, mobile, address, email, internshipDomain, college, password } = req.body;
     // Validate the request body
-    if (!name || !mobile || !address || !email || !college || !password) {
+    if (!name || !mobile || !address || !email || !internshipDomain || !college || !password) {
         return res.status(400).json({ error: 'All fields are required' });
     }
     try {
@@ -150,6 +104,7 @@ app.post('/faculties', async (req, res) => {
             "mobile": mobile,
             "address": address,
             "email": email,
+            "internshipDomain": internshipDomain,
             "college": college,
             "password": password,
             "isActive": 0
@@ -173,12 +128,12 @@ app.delete('/faculties/:id', async (req, res) => {
         // Check if the faculty exists
         const faculty = await knex('faculties').where({ id }).first();
         if (!faculty) {
-            return res.status(404).json({ error: 'Student not found' });
+            return res.status(404).json({ error: 'Faculties not found' });
         }
 
         // Delete the faculty from the database
         await knex('faculties').where({ id }).del();
-        res.status(200).json({ message: 'Student deleted successfully' });
+        res.status(200).json({ message: 'Faculties deleted successfully' });
     } catch (error) {
         console.error('Error deleting faculty:', error);
         res.status(500).json({ error: 'Failed to delete faculty' });
@@ -206,6 +161,89 @@ app.put('/faculties/:id/toggle-active', async (req, res) => {
     } catch (error) {
         console.error('Error toggling faculty status:', error);
         res.status(500).json({ error: 'Failed to toggle faculty status' });
+    }
+});
+
+// Tasks
+app.post('/tasks', async (req, res) => {
+    const { name, description, internshipDomain, faculty } = req.body;
+
+    // Validate the request body
+    if (!name || !internshipDomain || !faculty) {
+        return res.status(400).json({ error: 'All fields are required' });
+    }
+    try {
+        // Insert the student data into the database
+        await knex('tasks').insert({
+            "id": uuid.v4(),
+            "name": name,
+            "description": description,
+            "internshipDomain": internshipDomain,
+            "faculty": faculty
+        });
+        res.status(201).json({ message: 'task created successfully' });
+    } catch (error) {
+        console.error('Error inserting task:', error);
+        res.status(500).json({ error: 'Failed to create task' });
+    }
+});
+
+app.get('/tasks', async (req, res) => {
+    const tasks = await knex.from('tasks').select();
+    res.json(tasks)
+});
+
+app.post('/login', async (req, res) => {
+    const { email, password, role } = req.body;
+    if (!email || !password || !role) {
+        return res.status(400).json({ error: 'Email, password, and role are required' });
+    }
+    try {
+        if (role === "Admin") {
+            if (email === "admin@admin.com" && password === "admin#1947") {
+                return res.status(200).json(email);
+            } else {
+                return res.status(401).json({ error: "Invalid Admin credentials" });
+            }
+        } else if (role === "Faculty") {
+            const faculty = await knex('faculties').where({ email, password }).first();
+            if (faculty) {
+                delete faculty.password
+                return res.status(200).json(faculty);
+            } else {
+                return res.status(401).json({ error: "Invalid Faculty credentials" });
+            }
+        } else if (role === "Student") {
+            const student = await knex('students').where({ email, password }).first();
+            if (student) {
+                return res.status(200).json(email);
+            } else {
+                return res.status(401).json({ error: "Invalid Student credentials" });
+            }
+        } else {
+            return res.status(400).json({ error: "Invalid role specified" });
+        }
+    } catch (error) {
+        console.error('Error during login:', error);
+        res.status(500).json({ error: 'Failed to process login' });
+    }
+});
+
+app.get('/admin/dashboard', async (req, res) => {
+    try {
+        const students = await knex('students')
+        const faculties = await knex('faculties')
+        const tasks = await knex('tasks')
+
+        // Return the data as JSON
+        res.status(200).json({
+            students,
+            faculties,
+            tasks
+        });
+    } catch (error) {
+        console.error('Error fetching admin dashboard data:', error);
+        res.status(500).json({ error: 'Failed to fetch dashboard data' });
     }
 });
 
